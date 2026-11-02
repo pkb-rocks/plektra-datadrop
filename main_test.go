@@ -15,7 +15,7 @@ const validID = "0123456789abcdef0123456789abcdef"
 
 func newTestServer(t *testing.T) *server {
 	t.Helper()
-	return &server{dataDir: t.TempDir(), maxBytes: 1024, limiter: newRateLimiter(100, time.Minute), now: time.Now}
+	return &server{dataDir: t.TempDir(), maxBytes: 1024, sourceURL: defaultSourceURL, limiter: newRateLimiter(100, time.Minute), now: time.Now}
 }
 
 func do(t *testing.T, s *server, method, path, body string) *httptest.ResponseRecorder {
@@ -85,5 +85,21 @@ func TestRateLimiterBlocksAfterLimit(t *testing.T) {
 	}
 	if !limiter.allow("a", now.Add(2*time.Minute)) {
 		t.Fatal("expected window to expire")
+	}
+}
+
+func TestEveryResponseOffersTheSource(t *testing.T) {
+	s := newTestServer(t)
+	for _, path := range []string{"/", "/healthz", "/nope"} {
+		if link := do(t, s, "GET", path, "").Header().Get("Link"); link != "<"+s.sourceURL+">; rel=\"source\"" {
+			t.Fatalf("%s: Link header %q", path, link)
+		}
+	}
+	response := do(t, s, "GET", "/source", "")
+	if response.Code != http.StatusFound || response.Header().Get("Location") != s.sourceURL {
+		t.Fatalf("source redirect: %d %q", response.Code, response.Header().Get("Location"))
+	}
+	if body := do(t, s, "GET", "/", "").Body.String(); !strings.Contains(body, s.sourceURL) {
+		t.Fatalf("landing page lacks source link: %q", body)
 	}
 }

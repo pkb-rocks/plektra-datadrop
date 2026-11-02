@@ -15,6 +15,7 @@ used in memory for rate limiting and are not stored.
 - `POST /v1/sessions/known`: body `{"ids": [...]}`; returns `{"known": [...]}` for
   sessions already stored, so clients can skip them.
 - `GET /healthz`
+- `GET /` and `GET /source`: where to obtain this server's source code.
 
 ## Run
 
@@ -40,3 +41,8 @@ tools/pull-and-decrypt.sh <ssh-host> /var/lib/plektra-datadrop ./pulled
 ## License
 
 GNU Affero General Public License v3.0 only (`AGPL-3.0-only`), see `LICENSE`.
+
+Section 13 of the AGPL requires offering the source code to everyone who interacts with
+the server over a network. Every response carries a `Link: <…>; rel="source"` header,
+and `GET /source` redirects to the repository. If you run a modified version, publish
+your source and point `-source-url` (or `SOURCE_URL`) at it.

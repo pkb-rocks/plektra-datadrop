@@ -34,8 +34,10 @@ type server struct {
 	publish  sync.Mutex // serialises the exists-check and publication of a session
 	dataDir  string
 	maxBytes int64
-	limiter  *rateLimiter
-	now      func() time.Time
+	// sourceURL is offered on every response (AGPL-3.0 section 13).
+	sourceURL string
+	limiter   *rateLimiter
+	now       func() time.Time
 }
 
 type metadata struct {
@@ -48,11 +50,12 @@ func main() {
 	listen := flag.String("listen", envOr("LISTEN", "127.0.0.1:8080"), "listen address")
 	dataDir := flag.String("data", envOr("DATA_DIR", "./data"), "storage directory")
 	maxBytes := flag.Int64("max-bytes", 8<<20, "maximum ciphertext size per session")
+	sourceURL := flag.String("source-url", envOr("SOURCE_URL", defaultSourceURL), "public repository of the running source (AGPL-3.0 section 13)")
 	flag.Parse()
 	if err := os.MkdirAll(filepath.Join(*dataDir, "sessions"), 0o750); err != nil {
 		log.Fatal(err)
 	}
-	s := &server{dataDir: *dataDir, maxBytes: *maxBytes, limiter: newRateLimiter(60, 10*time.Minute), now: time.Now}
+	s := &server{dataDir: *dataDir, maxBytes: *maxBytes, sourceURL: *sourceURL, limiter: newRateLimiter(60, 10*time.Minute), now: time.Now}
 	httpServer := &http.Server{
 		Addr:              *listen,
 		Handler:           s.routes(),
@@ -71,12 +74,29 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// defaultSourceURL is where users interacting with this server can obtain its source,
+// as required by section 13 of the GNU AGPL. Deployments of modified versions must
+// point -source-url at their own published source.
+const defaultSourceURL = "https://github.com/pkb-rocks/plektra-datadrop"
+
 func (s *server) routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /{$}", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		io.WriteString(w, "Plektra datadrop: receives encrypted, opt-in typing-training sessions from the Plektra app.\n"+
+			"Free software under the GNU AGPL v3. Source code: "+s.sourceURL+"\n")
+	})
+	mux.HandleFunc("GET /source", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, s.sourceURL, http.StatusFound)
+	})
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { io.WriteString(w, "ok\n") })
 	mux.HandleFunc("POST /v1/sessions/known", s.handleKnown)
 	mux.HandleFunc("PUT /v1/sessions/{id}", s.handleUpload)
-	return mux
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Every response offers the corresponding source.
+		w.Header().Set("Link", "<"+s.sourceURL+">; rel=\"source\"")
+		mux.ServeHTTP(w, r)
+	})
 }
 
 func (s *server) sessionPath(id string) string {
