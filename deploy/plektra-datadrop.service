@@ -1,0 +1,16 @@
+[Unit]
+Description=Plektra datadrop (encrypted typing-training uploads)
+After=network-online.target
+
+[Service]
+User=plektra-datadrop
+ExecStart=/usr/local/bin/plektra-datadrop -listen 127.0.0.1:8080 -data /var/lib/plektra-datadrop
+Restart=on-failure
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/plektra-datadrop
+
+[Install]
+WantedBy=multi-user.target

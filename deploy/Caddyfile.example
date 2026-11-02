@@ -1,0 +1,11 @@
+# Caddy obtains and renews the TLS certificate automatically.
+plektra.pkb.rocks {
+	request_body {
+		max_size 8MB
+	}
+	log {
+		# Keep access logs off: the server must not persist client IP addresses.
+		output discard
+	}
+	reverse_proxy 127.0.0.1:8080
+}
